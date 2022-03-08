@@ -284,6 +284,99 @@ no changes added to commit (use "git add" and/or "git commit -a")
 
 Jo, för att vi inte uppdaterat filerna i vår arbetsyta när vi uppdaterat förberedelseytan och databasen.
 
+## Index
+
+För denna demo skapar vi ett nytt repo och gör en initial commit:
+
+```bash
+$ mkdir index-demo && cd index-demo
+$ git init
+$ echo "file1 v1" > file1
+$ echo "file2 v1" > file2
+$ git add file* && git commit -m 'Initial commit'
+$ find .git/objects/ -type f
+.git/objects//09/c717ae68b68fa9cb45beb256e7f2b220d6a05c
+.git/objects//af/7a6ca531e75993bad5153085d27137ba618f11
+.git/objects//b9/32a3680a096754826129aee308c64e31c27a29
+.git/objects//83/41d3ed4a2b75dd440efd4c794e8c4a8ea70654
+```
+
+Vi ser att vi har 4 objekt nu: 1 commit, 1 träd och 2 blobs.
+
+Vi kan också se att det vi just nu har i vårt index är samma träd:
+
+```bash
+$ git ls-files -s
+100644 09c717ae68b68fa9cb45beb256e7f2b220d6a05c 0	file1
+100644 af7a6ca531e75993bad5153085d27137ba618f11 0	file2
+```
+
+Om vi då gör en ändring i `file2` får vi ett smutsigt index, dvs vårt index stämmer inte med filerna i arbetsytan:
+
+```bash
+$ echo "file2 v2" > file2
+$ git status
+On branch main
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   file2
+
+no changes added to commit (use "git add" and/or "git commit -a")
+$ git ls-files -s
+100644 09c717ae68b68fa9cb45beb256e7f2b220d6a05c 0	file1
+100644 af7a6ca531e75993bad5153085d27137ba618f11 0	file2
+```
+
+Om vi då lägger till den ändrade filen så har vi fortfarande ett smutsigt index. Nu finns ett nytt objekt i databasen, men trädet i vårt index stämmer inte med det träd som ligger i databasen:
+
+```bash
+$ git add file2
+$ git status
+On branch main
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   file2
+
+$ find .git/objects/ -type f
+.git/objects//1a/7cbf33f6bf0b9ec0f116aa6a6328e830e71607
+.git/objects//09/c717ae68b68fa9cb45beb256e7f2b220d6a05c
+.git/objects//af/7a6ca531e75993bad5153085d27137ba618f11
+.git/objects//b9/32a3680a096754826129aee308c64e31c27a29
+.git/objects//83/41d3ed4a2b75dd440efd4c794e8c4a8ea70654
+$ git ls-files -s # detta är trädet i index
+100644 09c717ae68b68fa9cb45beb256e7f2b220d6a05c 0	file1
+100644 1a7cbf33f6bf0b9ec0f116aa6a6328e830e71607 0	file2
+$ git cat-file -p b932a3680a096754826129aee308c64e31c27a29 # detta är trädet vi sen tidigare sparat i databasen
+100644 blob 09c717ae68b68fa9cb45beb256e7f2b220d6a05c	file1
+100644 blob af7a6ca531e75993bad5153085d27137ba618f11	file2
+```
+
+När vi till slut gör en förbindelse så skapas 2 nya objekt i databasen, en commit och ett träd. Vi har inte längre ett smutsigt index:
+
+```bash
+$ git commit -m 'Change file2'
+[main a111479] Change file2
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+$ find .git/objects/ -type f
+.git/objects//32/8e630d2afd6ed6dd48e155cbecc9a4bd1cf86b
+.git/objects//1a/7cbf33f6bf0b9ec0f116aa6a6328e830e71607
+.git/objects//09/c717ae68b68fa9cb45beb256e7f2b220d6a05c
+.git/objects//af/7a6ca531e75993bad5153085d27137ba618f11
+.git/objects//b9/32a3680a096754826129aee308c64e31c27a29
+.git/objects//a1/1147927c430c9a4169ed357a614bc1ee39e26b
+.git/objects//83/41d3ed4a2b75dd440efd4c794e8c4a8ea70654
+$ git cat-file -p 328e630d2afd6ed6dd48e155cbecc9a4bd1cf86b # det här är det nya träd-objektet
+100644 blob 09c717ae68b68fa9cb45beb256e7f2b220d6a05c	file1
+100644 blob 1a7cbf33f6bf0b9ec0f116aa6a6328e830e71607	file2
+$ git ls-files -s # det här är vårt nuvarande index
+100644 09c717ae68b68fa9cb45beb256e7f2b220d6a05c 0	file1
+100644 1a7cbf33f6bf0b9ec0f116aa6a6328e830e71607 0	file2
+$ git status
+On branch main
+nothing to commit, working tree clean
+```
+
 ## Pack-files
 
 Vi börjar med att lägga till en lite större fil till vårt repo:
@@ -396,6 +489,8 @@ size-garbage: 0 bytes
 ```
 
 Identifiera den första och andra versionen av `file.py` i pack-filen och notera att den andra versionen finns i dess helhet medan den första fås av ett omvänt delta.
+
+## Remote references
 
 Vi kan också se att Git använder pack-filer när vi skickar objekt till en annan databas:
 

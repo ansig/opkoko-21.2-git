@@ -11,21 +11,14 @@ _class: lead
 -->
 # Under huven på Git
 ## En djupdykning i hur Git faktiskt fungerar
-Anders Sigfridsson, November 2021
-
----
-# Pro Git (git-scm.com)
-
-Vi kommer utgå från exempel som finns i sektionen "10. Git Internals" på git-scm.com/book 
-
-![w:500](git-scm-book.png)
+Anders Sigfridsson, Mars 2022
 
 ---
 # Git är en databas
 
 - Data lagras i en filstruktur och associeras med en unik nyckel
-- Användaren skriver och läser text från databasen
-- Data skickas och hämtas mellan en lokal och en eller fler avlägsen databas
+- Användaren skriver till och läser från databasen
+- Data skickas och hämtas mellan en lokal och en (eller fler) avlägsen databas
 
 ![](figures-database.png)
 
@@ -35,7 +28,7 @@ _footer: Anpassad från: https://git-scm.com/book/en/v2/Getting-Started-What-is-
 -->
 # Delta-baserad versionshantering
 
-I t ex Subversion lagras varje fil en gång och därefter är versioner bara skillnader (deltan)
+I t ex Subversion lagras varje fil en gång och därefter är varje version bara skillnader (deltan) mot den föregående
 
 ![h:350](figures-deltas.png)
 
@@ -66,7 +59,7 @@ _class: lead
 ---
 # Porslin och rörmokeri
 
-Förutom vanliga kommandon finns det ett antal specifika sub-kommandon som opererar på interna data-strukturer
+Förutom vanliga kommandon finns det ett antal sub-kommandon som verkar på interna datastrukturer
 
 ![h:350](figures-plumbing.png)
 
@@ -97,7 +90,7 @@ _footer: Anpassad från: https://git-scm.com/book/en/v2/Git-Internals-Git-Object
 -->
 # Förbindelser (`commits`)
 
-Historiken i Git får vi genom förbindelse-objekt (`commits`)
+Historiken i Git får vi genom förbindelse-objekt (`commits`) knutna till träd och andra förbindelser
 
 ![h:350](figures-commits.png)
 
@@ -121,13 +114,6 @@ Vid `add`:
 Vid `commit`:
 - skapa nytt träd från prepareringsytan (`write-tree`)
 - skapa förbindelse som pekar på det nya trädet och eventuell föregående förbindelse (`commit-tree`)
-
----
-# Lärdomar
-
-- Git bygger upp en graf med dataklumpar, träd och förbindelser
-- Git skiljer på innehållet och strukturen
-- Grenar (och taggar) är inte objekt
 
 ---
 <!--
@@ -160,12 +146,6 @@ När en fil ändras i arbetsytan eller lagts till i databasen och ingen ny förb
 ![h:350](figures-index.png)
 
 ---
-# Lärdomar
-
-- Filer lagras i Git redan vid `add`, men träd och förbindelser mellanlagras i ett index (prepareringsytan)
-- Med `diff` visas skillnaden mellan arbetsytan och prepareringsytan; med `diff --staged` (för gammalt `--cached`) visas skillnaderna mellan prepareringsytan och databasen
-
----
 <!--
 _class: lead
 -->
@@ -195,23 +175,10 @@ Vid `git gc` så paketeras lösa objekt-filer i `objects/packs`:
 ![h:270](figures-packs.png)
 
 ---
-# Lärdomar
-
-- Konceptuellt sett lagrar Git ögonblicksbilder men detta optimeras med delta-baserad paketering
-- Git städar regelbundet genom att flytta lösa objekt till paketeringsfiler (men bara de som kan knytas till en förbindelse!)
-
----
 <!--
 _class: lead
 -->
 # Lokala och fjärran databaser
-
----
-# Konsekvenser av hur Git lagrar data
-
-- Eftersom filnamnet inte är en del av en dataklump kan vilka filer som helst i databasen komprimeras i pack-filer
-- Det spelar ingen roll *hur* ett objekt skapas och det är enkelt att avgöra om ett visst objekt finns i databasen
-- En förbindelse är en unik identifierare av *hela* historiken från den tidpunkten
 
 ---
 # Referenser till fjärran saker
@@ -229,13 +196,6 @@ När vi talar om för Git att vi vill skicka eller hämta referenser (med en `re
 ![h:270](figures-remote-objects.png)
 
 ---
-# Lärdomar
-
-- Objekt överförs mellan databaser
-- Konfiguration och index överförs **inte** mellan databaser
-- Referenser **synkroniseras** mellan databaser
-
----
 <!--
 _class: lead
 -->
@@ -245,14 +205,6 @@ _class: lead
 # En mer detaljerad bild
 
 ![h:375](figures-readwrite.png)
-
----
-# Lärdomar
-<!-- 
-_footer: "*Konceptuellt sett åtminstone"
--->
-- Användaren lägger in data i Git ("databasen") och därifrån hämtas den till arbetsytan
-- All data sparas i sin helhet i databasen*, men filnamn- och struktur samt historik är meta-data
 
 ---
 # Jobba effektivt med Git
@@ -279,6 +231,17 @@ _class: lead
 -->
 
 # Bonusmaterial
+
+---
+# Lärdomar
+
+- Filer lagras i Git redan vid `add`, men träd och förbindelser mellanlagras i ett index (prepareringsytan)
+- Med `diff` visas skillnaden mellan arbetsytan och prepareringsytan; med `diff --staged` (för gammalt `--cached`) visas skillnaderna mellan prepareringsytan och databasen
+- Konceptuellt sett lagrar Git ögonblicksbilder men detta optimeras med delta-baserad paketering
+- Git städar regelbundet genom att flytta lösa objekt till paketeringsfiler (men bara de som kan knytas till en förbindelse!)
+- Objekt överförs mellan databaser
+- Konfiguration och index överförs **inte** mellan databaser
+- Referenser **synkroniseras** mellan databaser
 
 ---
 # Skapa objekt med Python

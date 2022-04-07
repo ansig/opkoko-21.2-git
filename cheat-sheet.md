@@ -1,6 +1,5 @@
 # Blobs
 
-e4dac686ff1b71cdf9301240c529f7f40e4dcbb9    "opkoko 21.2"
 83baae61804e65cc73a7201a7252750c76066a30    "version 1"
 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a    "version 2"
 257cc5642cb1a054f08cc83f2d943e56fd3ebe99    "foo"

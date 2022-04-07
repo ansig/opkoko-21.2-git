@@ -1,58 +1,62 @@
-# Under huven på Git
-
-Denna presentation är en djupdykning i hur Git faktiskt fungerar. Jag kommer att prata i detalj om hur text lagras och läses i Git, och demonstrera vad som händer internt när vi kör kommandon som `checkout`, `commit` och `branch`.
-
-Presentationen riktar sig främst till utvecklare som jobbar med Git och är intresserade att veta mer om hur det är implementerat.
-
-Målet är att ge en djupare förståelse både för att det är intressant i sig och för att göra oss till bättre Git-användare.
-
-Key takeaway: tänk på Git som en databas för text som vi kan hämta till vår arbetsyta
-
 # Demos
 
 ## Objects
 
-Initialt har vi detta:
+### Blobs
 
-```bash
-$ git init
-$ tree .git
-...
-```
-
-Git är alltså en databas som lagrar objekt. Vi kan själva skapa ett sådant objekt:
-
-```bash
-$ echo "opkoko 21.2" | git hash-object -w --stdin
-e4dac686ff1b71cdf9301240c529f7f40e4dcbb9
-$ tree .git/objects/
-.git/objects/
-├── e4
-│   └── dac686ff1b71cdf9301240c529f7f40e4dcbb9
-├── info
-└── pack
-```
-
-Git räknar ut en sha1-summa för **innehållet** (detta är viktigt, vi återkommer till det) och skapar en fil under `objects`. Filen är komprimerad, men vi kan se dess innehåll med:
-
-```bash
-$ file .git/objects/e4/dac686ff1b71cdf9301240c529f7f40e4dcbb9
-.git/objects/e4/dac686ff1b71cdf9301240c529f7f40e4dcbb9: zlib compressed data
-$ git cat-file -p e4dac686ff1b71cdf9301240c529f7f40e4dcbb9
-opkoko 21.2
-```
-
-Det är så här Git lagrar och hämtar all data. Så säg att vi har en fil på disk som vi ändrar, då gör Git så här:
+För att spara en fil direkt i Git kan vi använa kommandod `hash-object`:
 
 ```bash
 $ echo "version 1" > file1.txt
 $ git hash-object -w file1.txt
 83baae61804e65cc73a7201a7252750c76066a30
+$ tree .git/objects/
+.git/objects/
+├── 83
+│   └── baae61804e65cc73a7201a7252750c76066a30
+├── info
+└── pack
+```
+
+Vi ser att objektet sparats i en komprimerad fil och att dess innehåll är text-strängen "version 1":
+
+```bash
+$ file .git/objects/83/baae61804e65cc73a7201a7252750c76066a30
+.git/objects/83/baae61804e65cc73a7201a7252750c76066a30: zlib compressed data
+$ git cat-file -t 83baae61804e65cc73a7201a7252750c76066a30
+blob
+$ git cat-file -p 83baae61804e65cc73a7201a7252750c76066a30
+version 1
+```
+
+Om vi ändrar innehållet i den första filen och skapar en ny fil med ett annat innehåll så får vi fler blobs i databasen:
+
+```bash
 $ echo "version 2" > file1.txt
 $ git hash-object -w file1.txt
 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a
+$ echo "foo" > file2.txt
+$ git hash-object -w file2.txt
+257cc5642cb1a054f08cc83f2d943e56fd3ebe99
 $ tree .git/objects/
-...
+.git/objects/
+├── 1f
+│   └── 7a7a472abf3dd9643fd615f6da379c4acb3e3a
+├── 25
+│   └── 7cc5642cb1a054f08cc83f2d943e56fd3ebe99
+├── 83
+│   └── baae61804e65cc73a7201a7252750c76066a30
+├── info
+└── pack
+
+5 directories, 3 files
+```
+
+Notera att vi alltså nu har 3 stycken separata objekt, trots att vi bara har 2 filer. Det är för att varje blob representerar innehållet i en fil och att varje version av detta innehåll sparas i sin helhet i databasen.
+
+När Git jobbar med olika versioner av filer så läser den helt enkelt ut innehållet i en specifik blob till en fil i arbetsytan. T ex, om vi vill återställa den första versionen av `file1.txt`:
+
+```bash
 $ cat file1.txt
 version 2
 $ git cat-file -p 83baae61804e65cc73a7201a7252750c76066a30 > file1.txt
@@ -60,74 +64,91 @@ $ cat file1.txt
 version 1
 ```
 
-Alla 3 objekt vi har skapat nu är dataklumpar (`blobs`):
+Vi har nu heller ingen aning om namn eller plats i filstrukturen. För detta använder Git en annan typ av objekt: träd.
+
+### Trees
+
+Ett träd (tree) i Git representerar en katalogstruktur. Varje objekt innehåller en lista över blobs och/eller andra träd-objekt, ungeär som directory entries och inodes i ett filsystem.
+
+Det är träden som representerar en ögonblicksbild av arbetskatalogen, dvs vilka filer som inns och deras innehåll.
+
+För att t ex skapa ett träd som representerar första versionen av vårt projekt så gör vi följande träd:
 
 ```bash
-$ git cat-file -t 83baae61804e65cc73a7201a7252750c76066a30
-blob
-```
-
-Dessa objekt innehåller dock ingen information alls om filnamnen. För detta används istället träd-objekt (`tree`). Dessa är tabeller där varje rad är en referens till ett annat objekt, antingen en data-klump eller ett annat träd. Detta representerar en nivå i en filstruktur.
-
-Vi kan själva skapa ett sådant objekt med första versionen av vår fil:
-
-```bash
-$ git update-index --add --cacheinfo 100644 83baae61804e65cc73a7201a7252750c76066a30 file1.txt
-$ git ls-files --stage
-100644 83baae61804e65cc73a7201a7252750c76066a30 0	file1.txt
-$ git write-tree
+$ printf "100644 blob 83baae61804e65cc73a7201a7252750c76066a30\tfile1.txt" | git mktree
 b7e8fac7e3e35d93d39d2fa2260868f025a9efb4
 $ tree .git/objects/
-...
+.git/objects/
+├── 1f
+│   └── 7a7a472abf3dd9643fd615f6da379c4acb3e3a
+├── 25
+│   └── 7cc5642cb1a054f08cc83f2d943e56fd3ebe99
+├── 83
+│   └── baae61804e65cc73a7201a7252750c76066a30
+├── b7
+│   └── e8fac7e3e35d93d39d2fa2260868f025a9efb4
+├── info
+└── pack
+
+6 directories, 4 files
 $ git cat-file -t b7e8fac7e3e35d93d39d2fa2260868f025a9efb4
 tree
 $ git cat-file -p b7e8fac7e3e35d93d39d2fa2260868f025a9efb4
 100644 blob 83baae61804e65cc73a7201a7252750c76066a30	file1.txt
 ```
 
-Låt oss nu skapa ett till träd-objekt med andra versionen av vår fil och en ny fil:
+Den andra versionen av vårt projekt kan vi representera med ett träd-objekt med 2 rader:
 
 ```bash
-$ git cat-file -p 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a
-version 2
-$ git update-index --add --cacheinfo 100644 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a file1.txt
-$ echo "foo" > file2.txt
-$ git update-index --add file2.txt # NOTERA: vi behöver inte ange --cacheinfo här utan låter Git göra det
-$ git ls-files --stage
-100644 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a 0	file1.txt
-100644 257cc5642cb1a054f08cc83f2d943e56fd3ebe99 0	file2.txt
-$ git write-tree
+$ printf "100644 blob 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a\tfile1.txt" > /tmp/tree.txt
+$ printf "\n100644 blob 257cc5642cb1a054f08cc83f2d943e56fd3ebe99\tfile2.txt" >> /tmp/tree.txt
+$ cat /tmp/tree.txt && echo
+100644 blob 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a	file1.txt
+100644 blob 257cc5642cb1a054f08cc83f2d943e56fd3ebe99	file2.txt
+$ cat /tmp/tree.txt | git mktree
 b5556083f4a97bb5d46905fb2b900c05259ff250
-$ git cat-file -t b5556083f4a97bb5d46905fb2b900c05259ff250
-tree
 $ git cat-file -p b5556083f4a97bb5d46905fb2b900c05259ff250
 100644 blob 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a	file1.txt
 100644 blob 257cc5642cb1a054f08cc83f2d943e56fd3ebe99	file2.txt
+$ tree .git/objects/
+.git/objects/
+├── 07
+│   └── c4045f144b11f28f110bd1f747e4e04c028b9b
+├── 1f
+│   └── 7a7a472abf3dd9643fd615f6da379c4acb3e3a
+├── 25
+│   └── 7cc5642cb1a054f08cc83f2d943e56fd3ebe99
+├── 83
+│   └── baae61804e65cc73a7201a7252750c76066a30
+├── b5
+│   └── 556083f4a97bb5d46905fb2b900c05259ff250
+├── b7
+│   └── e8fac7e3e35d93d39d2fa2260868f025a9efb4
+├── info
+└── pack
+
+8 directories, 6 files
 ```
 
-Med träd-objekt kan vi bygga upp katalogstrukturer genom att referera andra träd. Säg att vi vill lägga en tredje fil i en katalog och att innehållet i den ska vara "version 1":
+Låt oss också göra en tredje version där vi lägger till ytterligare en fil i en underkatalog. Då behöver vi först skapa ett träd för underkatalogen och sedan ett träd som refererar både till våra beffintliga filer och till underkatalogen:
 
 ```bash
 $ printf "100644 blob 83baae61804e65cc73a7201a7252750c76066a30\tfile3.txt" | git mktree # NOTERA: kom ihåg att sha-summan för innehållet är samma som "version 1"
 c551f28adbcdd0da8892240b632c3613eee6a50c
-$ git cat-file -p c551f28adbcdd0da8892240b632c3613eee6a50c
-100644 blob 83baae61804e65cc73a7201a7252750c76066a30	file3.txt
-$ git read-tree --prefix=dir1 c551f28adbcdd0da8892240b632c3613eee6a50c
-$ git ls-files --stage
-100644 83baae61804e65cc73a7201a7252750c76066a30 0	dir1/file3.txt
-100644 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a 0	file1.txt
-100644 257cc5642cb1a054f08cc83f2d943e56fd3ebe99 0	file2.txt
-$ git write-tree
+$ cat /tmp/tree.txt && echo
+100644 blob 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a	file1.txt
+100644 blob 257cc5642cb1a054f08cc83f2d943e56fd3ebe99	file2.txt
+$ printf "\n040000 tree c551f28adbcdd0da8892240b632c3613eee6a50c\tdir1" >> /tmp/tree.txt
+$ cat /tmp/tree.txt && echo
+100644 blob 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a	file1.txt
+100644 blob 257cc5642cb1a054f08cc83f2d943e56fd3ebe99	file2.txt
+040000 tree c551f28adbcdd0da8892240b632c3613eee6a50c	dir1
+$ cat /tmp/tree.txt | git mktree
 2922bfc1b7c3765f0e06966b731af191110127a4
 $ git cat-file -p 2922bfc1b7c3765f0e06966b731af191110127a4
 040000 tree c551f28adbcdd0da8892240b632c3613eee6a50c	dir1
 100644 blob 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a	file1.txt
 100644 blob 257cc5642cb1a054f08cc83f2d943e56fd3ebe99	file2.txt
-```
-
-Var är vi nu då? Jo, vi har följande:
-
-```bash
 $ tree .git/objects/
 .git/objects/
 ├── 1f
@@ -144,145 +165,72 @@ $ tree .git/objects/
 │   └── e8fac7e3e35d93d39d2fa2260868f025a9efb4
 ├── c5
 │   └── 51f28adbcdd0da8892240b632c3613eee6a50c
-├── e4
-│   └── dac686ff1b71cdf9301240c529f7f40e4dcbb9
 ├── info
 └── pack
 
-10 directories, 8 files
+9 directories, 7 files
 ```
 
 ## Commits
 
-Låt oss börja med att skapa en förbindelse som pekar på det första träd vi skapade:
+Låt oss skapa en commit:
 
 ```bash
-$ cp -r objects-demo/ commits-demo
-$ cd commits-demo/
-$ git cat-file -p b7e8fac7e3e35d93d39d2fa2260868f025a9efb4
-100644 blob 83baae61804e65cc73a7201a7252750c76066a30	file1.txt
 $ echo "First commit" | git commit-tree b7e8fac7e3e35d93d39d2fa2260868f025a9efb4
 <COMMIT 1 SHA>
-$ git cat-file -p <COMMIT 1 SHA> # OBS! Inte samma SHA på committen
+$ git cat-file -t <COMMIT 1 SHA>
+commit
+$ git cat-file -p <COMMIT 1 SHA>
 tree b7e8fac7e3e35d93d39d2fa2260868f025a9efb4
-author Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1636879802 +0100
-committer Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1636879802 +0100
+author Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1649361615 +0200
+committer Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1649361615 +0200
 
 First commit
 ```
 
-Varje förbindelse pekar alltså på ett träd. Varje förbindelse kan också ha en (eller fler om det är en `merge`) förälder (`parent`). Så om vi vill bygga upp en historik över alla träd vi skapat så kan vi fortsätta med:
+Det här objektet innehåller alltså information om vem som skapade en viss version av vårt projekt och när detta skedde.
+
+Låt oss även skapa commits för våra andra träd:
 
 ```bash
-$ git cat-file -p b5556083f4a97bb5d46905fb2b900c05259ff250
-100644 blob 1f7a7a472abf3dd9643fd615f6da379c4acb3e3a	file1.txt
-100644 blob 257cc5642cb1a054f08cc83f2d943e56fd3ebe99	file2.txt
-$ echo "Second commit" | git commit-tree -p <COMMIT 1 SHA> b5556083f4a97bb5d46905fb2b900c05259ff250
+$ echo "Second commit" | git commit-tree -p <c> b5556083f4a97bb5d46905fb2b900c05259ff250
 <COMMIT 2 SHA>
 $ echo "Third commit" | git commit-tree -p <COMMIT 2 SHA> 2922bfc1b7c3765f0e06966b731af191110127a4
 <COMMIT 3 SHA>
 $ git cat-file -p <COMMIT 3 SHA>
 tree 2922bfc1b7c3765f0e06966b731af191110127a4
-parent <COMMIT 2 SHA>
-author Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1636880227 +0100
-committer Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1636880227 +0100
+parent afaa7f6737fc7b63d4dbc4c0b7ec2661472ce50b
+author Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1649398967 +0200
+committer Anders Sigfridsson <anders.sigfridsson@omegapoint.se> 1649398967 +0200
 
 Third commit
 ```
 
-Nu har vi en historik och följande objekt i databasen:
+Eftersom varje commit kan referera till en förälder har vi nu en historik:
 
 ```bash
-$ tree .git/objects/
-.git/objects/
-├── 1f
-│   └── 7a7a472abf3dd9643fd615f6da379c4acb3e3a
-├── 25
-│   └── 7cc5642cb1a054f08cc83f2d943e56fd3ebe99
-├── 29
-│   └── 22bfc1b7c3765f0e06966b731af191110127a4
-├── 2f
-│   └── 2e8c2796babefd027da63ab6cd979b5f812190
-├── 66
-│   └── 37401b91b0f98c1e9acb7ded97daee8009136c
-├── 83
-│   └── baae61804e65cc73a7201a7252750c76066a30
-├── 86
-│   └── 9a278f4a4a7ae04c95086ccb69af1e07fa2904
-├── b5
-│   └── 556083f4a97bb5d46905fb2b900c05259ff250
-├── b7
-│   └── e8fac7e3e35d93d39d2fa2260868f025a9efb4
-├── c5
-│   └── 51f28adbcdd0da8892240b632c3613eee6a50c
-├── e4
-│   └── dac686ff1b71cdf9301240c529f7f40e4dcbb9
-├── info
-└── pack
-
-13 directories, 11 files
+$ git log --oneline SHA3
+SHA3 Third commit
+SHA2 Second commit
+SHA1 First commit
 ```
-
-Varför är det 11 filer?
 
 ## References
 
 ```bash
-$ cp -r commits-demo/ refs-demo
-$ cd refs-demo/
-$ git log --oneline <COMMIT 3 SHA>
-869a278 Third commit
-6637401 Second commit
-2f2e8c2 First commit
-```
-
-Det är inte så smidigt att behöva komma ihåg checksummorna, så därför kan vi också lägga in referenser till objekt i vår databas:
-
-```bash
+$ git log
+fatal: your current branch 'main' does not have any commits yet
+$ git log --oneline SHA3
+...
 $ echo "<COMMIT 3 SHA>" > .git/refs/heads/main
-$ git log --oneline main
-869a278 (HEAD -> main) Third commit # NOTERA: detta är vårt nuvarande HEAD
-6637401 Second commit
-2f2e8c2 First commit
-# Det är inte uppmuntrat att vi direkt skriver till referens-filerna, utan det är bättre att använda update-ref:
-$ git update-ref refs/heads/release <COMMIT 2 SHA>
-$ git log --oneline release
-6637401 (release) Second commit
-2f2e8c2 First commit
+$ git log
+SHA3 Third commit
+SHA2 Second commit
+SHA1 First commit
+$ echo "<COMMIT 2 SHA>" > .git/res/heads/other
+$ git log other
+...
 ```
-
-Vi kan se att detta sparats som filer i `.git`-katalogen:
-
-```bash
-$ tree .git/refs/
-.git/refs/
-├── heads
-│   ├── main
-│   └── release
-└── tags
-
-2 directories, 2 files
-$ cat .git/refs/heads/main
-<COMMIT 3 SHA>
-$ cat .git/HEAD
-ref: refs/heads/main
-```
-
-Men varför i hela friden ser vårt repo ut så här?!
-
-```bash
-$ git status
-On branch main
-Changes not staged for commit:
-  (use "git add/rm <file>..." to update what will be committed)
-  (use "git restore <file>..." to discard changes in working directory)
-	deleted:    dir1/file3.txt
-	modified:   file1.txt
-
-no changes added to commit (use "git add" and/or "git commit -a")
-```
-
-Jo, för att vi inte uppdaterat filerna i vår arbetsyta när vi uppdaterat förberedelseytan och databasen.
 
 ## Index
 
@@ -522,5 +470,3 @@ To file://~/Scratch/remote.git
 Notera att den skickade 16 objekt, alltså att den inte skickade vårt lösa objekt.
 
 Notera också att den packade saker i en fil, men att om vi kollar i det andra repot är filerna där fortfarande opackade.
-
-Vänta, var är mina refs nu då?! Vid `git gc` så paketerar Git även alla individuella filer under `refs/heads`

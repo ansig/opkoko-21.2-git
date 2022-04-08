@@ -217,6 +217,8 @@ SHA1 First commit
 
 ## References
 
+Referenser är helt enkelt ett sätt att namnge olika commits. Det är filer i vilken det står en commit SHA:
+
 ```bash
 $ git log
 fatal: your current branch 'main' does not have any commits yet
@@ -229,6 +231,16 @@ SHA2 Second commit
 SHA1 First commit
 $ echo "<COMMIT 2 SHA>" > .git/res/heads/other
 $ git log other
+...
+```
+
+Huvudet (HEAD) är en symbolisk referens, dvs en statisk fil som anger vilken faktiskt referens som för närvarande skall representeras i arbetsytan:
+
+```bash
+$ cat .git/HEAD
+ref: refs/heads/main
+$ echo "ref: refs/heads/other" > .git/HEAD
+$ git log
 ...
 ```
 
